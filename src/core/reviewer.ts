@@ -28,13 +28,21 @@ export interface ReviewResult {
   verdict: string;
   findingsCount: number;
   summary: string;
+  dryRun: boolean;
+}
+
+export interface ReviewBranchOptions {
+  dryRun?: boolean;
 }
 
 export async function reviewBranch(
   branch: string,
   config: Config,
-  projectRoot: string
+  projectRoot: string,
+  options: ReviewBranchOptions = {}
 ): Promise<ReviewResult> {
+  const dryRun = options.dryRun ?? false;
+
   console.log(`Reviewing branch: ${branch}`);
 
   // Fetch latest
@@ -55,14 +63,19 @@ export async function reviewBranch(
   const diffLineCount = diff.split('\n').length;
   console.log(`Diff: ${diffLineCount} lines across commits:\n${commitLog}`);
 
-  // Find PR
+  // Find PR (optional in dry-run mode)
   const pr = findPR(config.repo, branch, projectRoot);
-  if (!pr) {
+  if (!pr && !dryRun) {
     throw new Error(
       `No open PR found for branch ${branch} in ${config.repo}`
     );
   }
-  console.log(`Found PR #${pr.number}: ${pr.url}`);
+  if (!pr && dryRun) {
+    console.log('Warning: No open PR found (dry-run mode, continuing anyway)');
+  }
+  if (pr) {
+    console.log(`Found PR #${pr.number}: ${pr.url}`);
+  }
 
   // Resolve custom prompt path
   const customPromptPath = config.reviewPrompt
@@ -97,20 +110,42 @@ export async function reviewBranch(
     body: formatInlineComment(f),
   }));
 
+  // Dry-run: print to stdout and return
+  if (dryRun) {
+    console.log('\n' + body);
+    if (inlineComments.length > 0) {
+      console.log('\n--- Inline Comments ---');
+      for (const c of inlineComments) {
+        console.log(`\n${c.path}:${c.line}`);
+        console.log(c.body);
+      }
+    }
+    return {
+      branch,
+      prNumber: pr?.number ?? 0,
+      prUrl: pr?.url ?? '',
+      reviewId: 0,
+      verdict: reviewOutput.verdict,
+      findingsCount: reviewOutput.findings.length,
+      summary: reviewOutput.summary,
+      dryRun: true,
+    };
+  }
+
   // Post or update review
-  const existing = findExistingReview(config.repo, pr.number, projectRoot);
+  const existing = findExistingReview(config.repo, pr!.number, projectRoot);
   let reviewId: number;
 
   if (existing) {
     console.log(`Updating existing review #${existing.id}`);
-    updateReview(config.repo, pr.number, existing.id, body, projectRoot);
+    updateReview(config.repo, pr!.number, existing.id, body, projectRoot);
     reviewId = existing.id;
 
     // Post new inline comments separately if there are findings
     if (inlineComments.length > 0) {
       reviewId = postReview(
         config.repo,
-        pr.number,
+        pr!.number,
         commitSha,
         body,
         inlineComments,
@@ -120,7 +155,7 @@ export async function reviewBranch(
   } else {
     reviewId = postReview(
       config.repo,
-      pr.number,
+      pr!.number,
       commitSha,
       body,
       inlineComments,
@@ -132,7 +167,7 @@ export async function reviewBranch(
   const state = loadState(projectRoot);
   state.reviews.push({
     branch,
-    prNumber: pr.number,
+    prNumber: pr!.number,
     commitSha,
     reviewId,
     verdict: reviewOutput.verdict,
@@ -144,11 +179,12 @@ export async function reviewBranch(
 
   return {
     branch,
-    prNumber: pr.number,
-    prUrl: pr.url,
+    prNumber: pr!.number,
+    prUrl: pr!.url,
     reviewId,
     verdict: reviewOutput.verdict,
     findingsCount: reviewOutput.findings.length,
     summary: reviewOutput.summary,
+    dryRun: false,
   };
 }

@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { z } from 'zod';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,15 +49,15 @@ function loadReviewPrompt(customPromptPath: string | null): string {
   throw new Error('Could not find review prompt file');
 }
 
-function loadReviewSchema(): string {
+function loadReviewSchema(): object {
   const distPath = join(__dirname, '..', 'prompts', 'review-schema.json');
   if (existsSync(distPath)) {
-    return readFileSync(distPath, 'utf-8');
+    return JSON.parse(readFileSync(distPath, 'utf-8'));
   }
 
   const srcPath = join(__dirname, '..', '..', 'src', 'prompts', 'review-schema.json');
   if (existsSync(srcPath)) {
-    return readFileSync(srcPath, 'utf-8');
+    return JSON.parse(readFileSync(srcPath, 'utf-8'));
   }
 
   throw new Error('Could not find review schema file');
@@ -69,46 +70,70 @@ export interface ReviewOptions {
   maxDiffLines: number;
 }
 
+export function truncateDiff(diff: string, maxLines: number): string {
+  const diffLines = diff.split('\n');
+  if (diffLines.length <= maxLines) return diff;
+  return (
+    diffLines.slice(0, maxLines).join('\n') +
+    `\n\n[... truncated at ${maxLines} lines, ${diffLines.length - maxLines} lines omitted ...]`
+  );
+}
+
+export function buildReviewPayload(
+  diff: string,
+  commitLog: string,
+  diffStat: string,
+  options: Pick<ReviewOptions, 'customPromptPath' | 'maxDiffLines'>
+): { systemPrompt: string; userMessage: string; schema: object } {
+  const systemPrompt = loadReviewPrompt(options.customPromptPath);
+  const schema = loadReviewSchema();
+  const truncated = truncateDiff(diff, options.maxDiffLines);
+  const userMessage = `## Commit Log\n${commitLog}\n\n## Diff Summary\n${diffStat}\n\n## Full Diff\n${truncated}`;
+  return { systemPrompt, userMessage, schema };
+}
+
 export async function runReview(
   diff: string,
   commitLog: string,
   diffStat: string,
   options: ReviewOptions
 ): Promise<ReviewOutput> {
-  const prompt = loadReviewPrompt(options.customPromptPath);
-  const schema = loadReviewSchema();
+  const { systemPrompt, userMessage, schema } = buildReviewPayload(
+    diff, commitLog, diffStat, options
+  );
 
-  // Truncate diff if too large
-  const diffLines = diff.split('\n');
-  const truncated =
-    diffLines.length > options.maxDiffLines
-      ? diffLines.slice(0, options.maxDiffLines).join('\n') +
-        `\n\n[... truncated at ${options.maxDiffLines} lines, ${diffLines.length - options.maxDiffLines} lines omitted ...]`
-      : diff;
+  const pid = process.pid;
+  const schemaPath = join(tmpdir(), `mar-schema-${pid}.json`);
+  const promptPath = join(tmpdir(), `mar-prompt-${pid}.md`);
 
-  const stdinContent = `## Commit Log\n${commitLog}\n\n## Diff Summary\n${diffStat}\n\n## Full Diff\n${truncated}`;
+  writeFileSync(schemaPath, JSON.stringify(schema));
+  writeFileSync(promptPath, systemPrompt);
 
-  const schemaArg = schema.replace(/'/g, "'\\''");
+  try {
+    const cmd = [
+      'claude',
+      '-p',
+      '--model', options.model,
+      '--output-format', 'json',
+      '--json-schema', schemaPath,
+      '--allowedTools', 'Read,Glob,Grep',
+      '--append-system-prompt', `"$(cat ${promptPath})"`,
+    ].join(' ');
 
-  const cmd = [
-    'claude',
-    '-p',
-    '--model', options.model,
-    '--output-format', 'json',
-    '--json-schema', `'${schemaArg}'`,
-    '--allowedTools', '"Read,Glob,Grep"',
-    '--append-system-prompt', `'${prompt.replace(/'/g, "'\\''")}'`,
-  ].join(' ');
+    const result = execSync(cmd, {
+      cwd: options.cwd,
+      encoding: 'utf-8',
+      input: userMessage,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: '/bin/sh',
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 5 * 60 * 1000, // 5 minute timeout
+    });
 
-  const result = execSync(cmd, {
-    cwd: options.cwd,
-    encoding: 'utf-8',
-    input: stdinContent,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    maxBuffer: 10 * 1024 * 1024,
-    timeout: 5 * 60 * 1000, // 5 minute timeout
-  });
-
-  const parsed = JSON.parse(result);
-  return ReviewOutputSchema.parse(parsed);
+    const parsed = JSON.parse(result);
+    return ReviewOutputSchema.parse(parsed);
+  } finally {
+    try { unlinkSync(schemaPath); } catch {}
+    try { unlinkSync(promptPath); } catch {}
+  }
 }

@@ -4,7 +4,7 @@ import { reviewBranch, type ReviewResult } from '../core/reviewer.js';
 
 export async function reviewCommand(
   branch: string | undefined,
-  options: { cwd?: string }
+  options: { cwd?: string; dryRun?: boolean }
 ): Promise<void> {
   const projectRoot = options.cwd ?? findProjectRoot();
   const config = loadConfig(projectRoot);
@@ -19,7 +19,9 @@ export async function reviewCommand(
   }
 
   try {
-    const result = await reviewBranch(targetBranch, config, projectRoot);
+    const result = await reviewBranch(targetBranch, config, projectRoot, {
+      dryRun: options.dryRun ?? false,
+    });
     printResult(result);
   } catch (err) {
     console.error(`Review failed: ${(err as Error).message}`);
@@ -28,9 +30,15 @@ export async function reviewCommand(
 }
 
 function printResult(result: ReviewResult): void {
-  console.log('\n--- Review Posted ---');
+  if (result.dryRun) {
+    console.log('\n--- Dry Run (not posted) ---');
+  } else {
+    console.log('\n--- Review Posted ---');
+  }
   console.log(`Branch:   ${result.branch}`);
-  console.log(`PR:       #${result.prNumber} (${result.prUrl})`);
+  if (result.prNumber) {
+    console.log(`PR:       #${result.prNumber} (${result.prUrl})`);
+  }
   console.log(`Verdict:  ${result.verdict}`);
   console.log(`Findings: ${result.findingsCount}`);
   console.log(`Summary:  ${result.summary}`);

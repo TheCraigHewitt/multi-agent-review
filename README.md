@@ -48,6 +48,42 @@ mar review codex/my-feature
    - Uses `COMMENT` event (advisory only, never blocks merges)
    - Updates existing review instead of posting duplicates
 
+## GitHub Action
+
+Add Claude reviews to any repo without installing the CLI:
+
+```yaml
+# .github/workflows/review.yml
+name: Claude Review
+on: pull_request
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: TheCraigHewitt/multi-agent-review@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### Action Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `anthropic_api_key` | Anthropic API key | Yes | — |
+| `model` | Claude model to use | No | `claude-sonnet-4-6` |
+| `max_diff_lines` | Diff truncation limit | No | `5000` |
+
+### Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `verdict` | Review verdict (`clean`, `minor_issues`, `major_issues`, `critical`) |
+| `findings_count` | Number of findings |
+
 ## Commands
 
 ### `mar init`
@@ -60,6 +96,9 @@ Review a specific branch (defaults to current branch). Requires an open PR.
 
 ```bash
 mar review codex/add-auth
+
+# Preview review locally without posting to GitHub
+mar review codex/add-auth --dry-run
 ```
 
 ### `mar status`

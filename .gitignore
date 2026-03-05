@@ -3,3 +3,5 @@ dist/
 *.tsbuildinfo
 .env
 .mar/
+action/compiled/
+!action/dist/

@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "build:action": "tsc -p action/tsconfig.json && ncc build action/compiled/index.js -o action/dist",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -43,7 +44,11 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@actions/core": "^3.0.0",
+    "@actions/github": "^9.0.0",
+    "@anthropic-ai/sdk": "^0.78.0",
     "@types/node": "^22.0.0",
+    "@vercel/ncc": "^0.38.4",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

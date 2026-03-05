@@ -28,6 +28,7 @@ program
   .command('review [branch]')
   .description('Review a branch and post findings to its PR')
   .option('--cwd <dir>', 'Working directory (for notify handler)')
+  .option('--dry-run', 'Print review to stdout instead of posting to GitHub')
   .action(reviewCommand);
 
 program
