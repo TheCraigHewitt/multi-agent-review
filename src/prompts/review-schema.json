@@ -1,0 +1,64 @@
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One or two sentence summary of what the branch does"
+    },
+    "walkthrough": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "File path"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief description of changes in this file"
+          }
+        },
+        "required": ["file", "description"]
+      },
+      "description": "Per-file walkthrough of changes"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "File path where the issue occurs"
+          },
+          "line": {
+            "type": "integer",
+            "description": "Line number in the file"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "warning", "suggestion"],
+            "description": "Issue severity"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Description of the issue"
+          },
+          "suggestion": {
+            "type": "string",
+            "description": "Optional code suggestion to fix the issue"
+          }
+        },
+        "required": ["file", "line", "severity", "comment"]
+      },
+      "description": "List of specific issues found"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["clean", "minor_issues", "major_issues", "critical"],
+      "description": "Overall verdict"
+    }
+  },
+  "required": ["summary", "walkthrough", "findings", "verdict"]
+}

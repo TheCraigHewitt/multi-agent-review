@@ -1,0 +1,50 @@
+{
+  "name": "multi-agent-review",
+  "version": "0.1.0",
+  "description": "Automated PR reviews by Claude Code for commits made by Codex and other AI agents",
+  "type": "module",
+  "bin": {
+    "mar": "./bin/mar.js"
+  },
+  "main": "./dist/cli.js",
+  "files": [
+    "dist",
+    "bin",
+    "src/prompts"
+  ],
+  "scripts": {
+    "build": "tsc && cp -r src/prompts dist/prompts",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "claude",
+    "codex",
+    "code-review",
+    "ai-agents",
+    "github",
+    "pull-request"
+  ],
+  "author": "Craig Hewitt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheCraigHewitt/multi-agent-review.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "toml": "^3.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
